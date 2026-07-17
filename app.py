@@ -41,10 +41,11 @@ logging.basicConfig(
 logger = logging.getLogger("pdf_chatbot")
 
 
-def log_interaction(question, retrieved_meta, response_time, answer):
+def log_interaction(question, retrieved_meta, response_time, answer, standalone_question=None):
     entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "question": question,
+        "standalone_question": standalone_question,
         "retrieved_documents": retrieved_meta,
         "response_time_seconds": round(response_time, 2),
         "answer": answer,
@@ -127,7 +128,7 @@ with st.sidebar:
 os.environ["HF_TOKEN"] = manual_token
 
 
-MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct:featherless-ai"
+MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct:featherless-ai"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Distance threshold for the "not found" guard (requirement 12 + the
@@ -136,7 +137,11 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 # based on what you see in the debug "Retrieved Chunks" panel.
 NOT_FOUND_DISTANCE_THRESHOLD = 1.3
 
-PROMPT_TEMPLATE = """You are a helpful assistant that answers questions using ONLY the provided context extracted from the user's uploaded documents. Never use outside knowledge, even if you know the answer. If the context does not contain the answer, respond with exactly this sentence and nothing else: "{not_found_msg}"
+PROMPT_TEMPLATE = """You are a helpful assistant that answers questions using ONLY the information present in the provided context, extracted from the user's uploaded documents. Never use outside knowledge that isn't in the context, even if you happen to know it.
+
+Read the context carefully and synthesize a clear answer, even if the relevant information is spread across a few sentences, phrased differently than the question, or stated as part of a broader category (e.g. a "postgraduate" policy that also covers PhD). You do not need an exact matching sentence — reasoning from clearly related context is fine.
+
+Only respond with exactly this sentence, and nothing else, if the context truly does not address the question's topic at all: "{not_found_msg}"
 
 Context:
 {{context}}
@@ -144,6 +149,53 @@ Context:
 Question: {{question}}""".format(not_found_msg=NOT_FOUND_MSG)
 
 PROMPT = PromptTemplate(template=PROMPT_TEMPLATE, input_variables=["context", "question"])
+
+CONDENSE_PROMPT_TEMPLATE = """Given the recent conversation and a follow-up question, rewrite the follow-up into a standalone question that includes whatever context it implicitly refers to (e.g. resolve "it", "that", "its" into the actual subject being discussed).
+
+If the follow-up question is already standalone and doesn't depend on the conversation, just return it unchanged.
+
+Respond with ONLY the rewritten question — no explanation, no quotes, no extra text.
+
+Recent conversation:
+{chat_history}
+
+Follow-up question: {question}
+
+Standalone question:"""
+
+CONDENSE_PROMPT = PromptTemplate(
+    template=CONDENSE_PROMPT_TEMPLATE, input_variables=["chat_history", "question"]
+)
+
+
+def condense_question(llm, chat_history_text: str, question: str) -> str:
+    """Rewrites a follow-up question (e.g. 'so what's its requirements?') into
+    a standalone one using recent turns, so retrieval isn't done on a
+    near-contentless, pronoun-only query. Falls back to the original question
+    if the rewrite call fails for any reason — better a slightly worse
+    retrieval than a crashed turn."""
+    if not chat_history_text.strip():
+        return question
+    try:
+        prompt_text = CONDENSE_PROMPT.format(chat_history=chat_history_text, question=question)
+        result = llm.invoke(prompt_text)
+        rewritten = result.content.strip().strip('"')
+        return rewritten if rewritten else question
+    except Exception:
+        return question
+
+
+def format_recent_history(messages, max_turns: int = 3) -> str:
+    """Formats the last few chat turns as plain text for the condense prompt.
+    Excludes the current in-flight question (already appended by the caller
+    before this runs, so we slice it off)."""
+    prior = messages[:-1] if messages else []
+    recent = prior[-(max_turns * 2):]
+    lines = []
+    for msg in recent:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        lines.append(f"{role}: {msg['content']}")
+    return "\n".join(lines)
 
 
 # ---------- Cached model resources ----------
@@ -352,8 +404,11 @@ if question:
             else:
                 filter_dict = build_filter(selected_docs, selected_categories)
 
+                chat_history_text = format_recent_history(st.session_state.messages)
+                standalone_question = condense_question(llm, chat_history_text, question)
+
                 with st.spinner("Searching your documents..."):
-                    results = retrieve_with_scores(vectorstore, question, top_k, filter_dict)
+                    results = retrieve_with_scores(vectorstore, standalone_question, top_k, filter_dict)
 
                 if not results or min(score for _, score in results) > NOT_FOUND_DISTANCE_THRESHOLD:
                     # Hard guard (requirement 12 + no-general-knowledge rule):
@@ -363,7 +418,7 @@ if question:
                     st.write(answer)
                 else:
                     context = "\n\n".join(doc.page_content for doc, _ in results)
-                    answer = st.write_stream(stream_answer(llm, context, question))
+                    answer = st.write_stream(stream_answer(llm, context, standalone_question))
 
                 # Document name + page number shown with every answer (requirement 8)
                 with st.expander("📄 Sources"):
@@ -378,6 +433,8 @@ if question:
                 # Retrieved-chunk debug display (requirement 11)
                 if show_debug:
                     with st.expander("🛠️ Debug: Retrieved Chunks"):
+                        if standalone_question != question:
+                            st.caption(f"Rewritten for retrieval: *{standalone_question}*")
                         for doc, score in results:
                             st.markdown(f"**chunk_id:** `{doc.metadata.get('chunk_id')}`  |  **distance:** {score:.3f}")
                             st.text(doc.page_content[:500])
@@ -394,7 +451,7 @@ if question:
                     for doc, score in results
                 ]
                 elapsed = time.time() - start_time
-                log_interaction(question, retrieved_meta, elapsed, answer)
+                log_interaction(question, retrieved_meta, elapsed, answer, standalone_question)
 
         except Exception as e:
             answer = f"Error calling the model: {e}"
