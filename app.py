@@ -127,7 +127,7 @@ with st.sidebar:
 os.environ["HF_TOKEN"] = manual_token
 
 
-MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
+MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct:featherless-ai"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Distance threshold for the "not found" guard (requirement 12 + the
