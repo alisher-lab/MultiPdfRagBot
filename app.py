@@ -1,4 +1,4 @@
-# app.py — Multi-PDF RAG Chatbot (Qwen2.5-3B via Hugging Face Inference API)
+# app.py — Multi-PDF RAG Chatbot (Qwen2.5-7B via Hugging Face Inference API)
 # multi-PDF upload, chunking w/ overlap, embeddings, Chroma storage,
 # cross-document retrieval, metadata (doc name/page/category/chunk id),
 # document/category filtering, retrieved-chunk debug view, strict
@@ -24,7 +24,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-st.set_page_config(page_title="Multi-PDF Chatbot (Qwen2.5-3B)", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Multi-PDF Chatbot (Qwen2.5-7B)", page_icon="📚", layout="wide")
 
 NOT_FOUND_MSG = "The requested information was not found in the available documents."
 
@@ -205,7 +205,7 @@ def load_embeddings():
     return HuggingFaceEmbeddings(model_name=EMBED_MODEL, model_kwargs={"device": device})
 
 
-@st.cache_resource(show_spinner="Connecting to Qwen2.5-3B via Hugging Face Inference API...")
+@st.cache_resource(show_spinner="Connecting to Qwen2.5-7B via Hugging Face Inference API...")
 def load_llm(_token: str):
     return ChatOpenAI(
         model=MODEL_NAME,
@@ -330,7 +330,7 @@ def stream_static(text):
 
 # ---------- App UI ----------
 
-st.title("📚 UMT Admission Guide Chatbot — Qwen2.5-3B")
+st.title("📚 UMT Admission Guide Chatbot — Qwen2.5-7B")
 
 with st.sidebar:
     st.subheader("📁 Documents")
