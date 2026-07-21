@@ -1,6 +1,5 @@
 # app.py — Multi-PDF RAG Chatbot (Qwen2.5-3B via Hugging Face Inference API)
-#
-# Covers: multi-PDF upload, chunking w/ overlap, embeddings, Chroma storage,
+# multi-PDF upload, chunking w/ overlap, embeddings, Chroma storage,
 # cross-document retrieval, metadata (doc name/page/category/chunk id),
 # document/category filtering, retrieved-chunk debug view, strict
 # "not found" fallback, session chat history, and basic logging.
@@ -29,7 +28,7 @@ st.set_page_config(page_title="Multi-PDF Chatbot (Qwen2.5-3B)", page_icon="📚"
 
 NOT_FOUND_MSG = "The requested information was not found in the available documents."
 
-# ---------- Logging (requirement 13) ----------
+# ---------- Logging ----------
 # Basic file logging — note: on Streamlit Cloud this file lives on the
 # ephemeral container filesystem, so it survives only until the next
 # restart/redeploy. Fine for session-level debugging; not durable storage.
@@ -56,7 +55,7 @@ def log_interaction(question, retrieved_meta, response_time, answer, standalone_
     st.session_state.log_entries.append(entry)
 
 
-# ---------- Auth (unchanged from before) ----------
+# ---------- Auth ----------
 
 def validate_hf_token(token: str, retries: int = 2):
     from huggingface_hub.utils import HfHubHTTPError
@@ -131,7 +130,7 @@ os.environ["HF_TOKEN"] = manual_token
 MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct:featherless-ai"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Distance threshold for the "not found" guard (requirement 12 + the
+# Distance threshold for the "not found" guard (the
 # no-general-knowledge rule). Chroma's default distance is smaller = more
 # similar. Tune this against your own documents — start here and adjust
 # based on what you see in the debug "Retrieved Chunks" panel.
@@ -218,7 +217,7 @@ def load_llm(_token: str):
     )
 
 
-# ---------- Multi-document ingestion (requirements 1-7) ----------
+# ---------- Multi-document ingestion ----------
 
 def process_documents(uploaded_files, categories, embeddings):
     """Loads + chunks every uploaded PDF, tags each chunk with metadata
@@ -263,7 +262,7 @@ def process_documents(uploaded_files, categories, embeddings):
     return vectorstore, all_chunks, doc_names, all_categories
 
 
-# ---------- Retrieval across all documents, with optional filtering (requirements 6, 10) ----------
+# ---------- Retrieval across all documents, with optional filtering ----------
 
 def build_filter(selected_docs, selected_categories):
     conditions = []
@@ -331,7 +330,7 @@ def stream_static(text):
 
 # ---------- App UI ----------
 
-st.title("📚 Multi-PDF Chatbot — Qwen2.5-3B")
+st.title("📚 UMT Admission Guide Chatbot — Qwen2.5-3B")
 
 with st.sidebar:
     st.subheader("📁 Documents")
